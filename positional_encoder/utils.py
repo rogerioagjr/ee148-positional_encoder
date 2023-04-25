@@ -39,19 +39,18 @@ def batchify(data: Tensor, bsz: int) -> Tensor:
     return data
 
 
-def get_wikitext2_data(train_batch_size: int, eval_batch_size: int, device) -> Tuple[Tensor, Tensor, Tensor, Vocab]:
+def get_wikitext2_data(batch_size: int, device: str) -> Tuple[Tensor, Tensor, Tensor, Vocab]:
     """
     Helper Function to get tokenized and batched train, validation, and test splits from the WikiText-2 dataset
     (https://paperswithcode.com/dataset/wikitext-2)
 
     Arguments:
-        train_batch_size: int
-        eval_batch_size: int
+        batch_size: int
         device: str,
 
     Returns:
-        tuple (train_data, val_data, test_data, vocab: Vocab), where train_data has shape ``[seq_len, train_batch_size]`` and
-        val_data, test_data have shape ``[seq_len, eval_batch_size]``
+        tuple (train_data, val_data, test_data, vocab: Vocab), where train_data, val_data, and test_data have shape
+        ``[seq_len, train_batch_size]``
     """
     train_iter = WikiText2(split='train')
     tokenizer = get_tokenizer('basic_english')
@@ -65,9 +64,9 @@ def get_wikitext2_data(train_batch_size: int, eval_batch_size: int, device) -> T
     val_data = data_process(val_iter, vocab=vocab, tokenizer=tokenizer)
     test_data = data_process(test_iter, vocab=vocab, tokenizer=tokenizer)
 
-    train_data = batchify(train_data, train_batch_size).to(device)  # shape ``[seq_len, batch_size]``
-    val_data = batchify(val_data, eval_batch_size).to(device)
-    test_data = batchify(test_data, eval_batch_size).to(device)
+    train_data = batchify(train_data, batch_size).to(device)  # shape ``[seq_len, batch_size]``
+    val_data = batchify(val_data, batch_size).to(device)
+    test_data = batchify(test_data, batch_size).to(device)
 
     return train_data, val_data, test_data, vocab
 
