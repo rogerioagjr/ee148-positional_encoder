@@ -2,7 +2,10 @@ import torch
 from torch import Tensor, nn
 from torch.utils.data import dataset
 from torchtext.vocab.vocab import Vocab
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Type
+
+import os
+from tempfile import TemporaryDirectory
 
 from torchtext.datasets import WikiText2
 from torchtext.data.utils import get_tokenizer
@@ -36,8 +39,7 @@ def batchify(data: Tensor, bsz: int) -> Tensor:
     return data
 
 
-def get_wikitext2_data(train_batch_size: int, eval_batch_size: int, device: str = 'cpu') \
-        -> Tuple[Tensor, Tensor, Tensor]:
+def get_wikitext2_data(train_batch_size: int, eval_batch_size: int, device) -> Tuple[Tensor, Tensor, Tensor, Vocab]:
     """
     Helper Function to get tokenized and batched train, validation, and test splits from the WikiText-2 dataset
     (https://paperswithcode.com/dataset/wikitext-2)
@@ -92,23 +94,21 @@ def generate_square_subsequent_mask(sz: int) -> Tensor:
     return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
 
 
-def train(model: nn.Module, train_data: Tensor, max_seq_len: int, criterion: Callable, lr: float,
-          n_tokens: int, epoch: int , device: str = 'cpu', verbose: bool = True) -> None:
+def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable, optimizer, scheduler, n_tokens: int, epoch: int,
+          device: str, max_seq_len: int = 35, verbose: bool = True) -> None:
     """
     Arguments:
         model: nn.Module
         train_data: Tensor, shape ``[full_seq_len, batch_size]``
         max_seq_len: int
         criterion: Callable, returns the loss function
-        lr: float
+        optimizer:
+        scheduler:
         n_tokens: int
         epoch: int
         device: str
         verbose: bool
     """
-
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.95)
 
     model.train()  # turn on train mode
     total_loss = 0.
@@ -141,19 +141,58 @@ def train(model: nn.Module, train_data: Tensor, max_seq_len: int, criterion: Cal
                   f'loss {cur_loss:5.2f} | ppl {ppl:8.2f}')
             total_loss = 0
             start_time = time.time()
+    scheduler.step()
 
 
-def evaluate(model: nn.Module, eval_data: Tensor) -> float:
+def evaluate(model: Type[nn.Module], eval_data: Tensor, n_tokens: int, criterion: Callable, device: str,
+             max_seq_len: int = 35) -> float:
     model.eval()  # turn on evaluation mode
     total_loss = 0.
-    src_mask = generate_square_subsequent_mask(bptt).to(device)
+    src_mask = generate_square_subsequent_mask(max_seq_len).to(device)
     with torch.no_grad():
-        for i in range(0, eval_data.size(0) - 1, bptt):
+        for i in range(0, eval_data.size(0) - 1, max_seq_len):
             data, targets = get_batch(eval_data, i)
             seq_len = data.size(0)
-            if seq_len != bptt:
+            if seq_len != max_seq_len:
                 src_mask = src_mask[:seq_len, :seq_len]
             output = model(data, src_mask)
             output_flat = output.view(-1, n_tokens)
             total_loss += seq_len * criterion(output_flat, targets).item()
     return total_loss / (len(eval_data) - 1)
+
+
+def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_data: Tensor, n_tokens: int, n_epochs: int,
+          criterion: Callable, device: str, lr: float = 0.5, verbose: bool = True):
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.95)
+    criterion = nn.CrossEntropyLoss()
+
+    with TemporaryDirectory() as tempdir:
+        best_model_params_path = os.path.join(tempdir, "best_model_params.pt")
+
+        for epoch in range(1, n_epochs + 1):
+            epoch_start_time = time.time()
+            train_epoch(model, train_data, criterion, optimizer, scheduler, n_tokens, epoch, device, verbose=verbose)
+            val_loss = evaluate(model, val_data, n_tokens, criterion, device)
+            val_ppl = math.exp(val_loss)
+            elapsed = time.time() - epoch_start_time
+            if verbose:
+                print('-' * 89)
+                print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
+                      f'valid loss {val_loss:5.2f} | valid ppl {val_ppl:8.2f}')
+                print('-' * 89)
+
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                torch.save(model.state_dict(), best_model_params_path)
+
+            scheduler.step()
+        model.load_state_dict(torch.load(best_model_params_path))  # load best model states
+
+    test_loss = evaluate(model, test_data, n_tokens, criterion, device)
+    test_ppl = math.exp(test_loss)
+    if verbose:
+        print('=' * 89)
+        print(f'| End of training | test loss {test_loss:5.2f} | '
+              f'test ppl {test_ppl:8.2f}')
+        print('=' * 89)
