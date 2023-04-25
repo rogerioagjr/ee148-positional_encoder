@@ -5,19 +5,17 @@ import math
 
 
 class TransformerModel(nn.Module):
-    def __init__(self, n_tokens: int, d_model: int, nhead: int, d_hid: int,
-                 num_layers: int, text_encoder: nn.Module, pos_encoder: nn.Module,
-                 dropout: float = 0.5, init_range: float = 0.1):
+    def __init__(self, text_encoder: nn.Module, pos_encoder: nn.Module,
+                 n_tokens: int, d_model: int = 200, nhead: int = 2, d_hid: int = 200,
+                 num_layers: int = 2, dropout: float = 0.2, init_range: float = 0.1):
         super().__init__()
         self.model_type = 'Transformer'
-        self.text_encoder = text_encoder(n_tokens, d_model)
+        self.text_encoder = text_encoder(n_tokens, d_model, init_range)
         self.pos_encoder = pos_encoder(d_model, dropout)
         encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout)
         self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers)
         self.d_model = d_model
         self.decoder = nn.Linear(d_model, n_tokens)
-
-        self.init_weights(init_range=init_range)
 
         self.decoder.bias.data.zero_()
         self.decoder.weight.data.uniform_(-init_range, init_range)
