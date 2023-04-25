@@ -94,8 +94,8 @@ def generate_square_subsequent_mask(sz: int) -> Tensor:
     return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
 
 
-def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable, optimizer, scheduler, n_tokens: int, epoch: int,
-          device: str, max_seq_len: int = 35, verbose: bool = True) -> None:
+def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable, optimizer, scheduler, n_tokens: int,
+                epoch: int, device: str, max_seq_len: int = 35, verbose: bool = True) -> None:
     """
     Arguments:
         model: nn.Module
@@ -165,7 +165,7 @@ def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_dat
           criterion: Callable, device: str, lr: float = 0.5, verbose: bool = True):
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.95)
-    criterion = nn.CrossEntropyLoss()
+    best_val_loss = float('inf')
 
     with TemporaryDirectory() as tempdir:
         best_model_params_path = os.path.join(tempdir, "best_model_params.pt")
