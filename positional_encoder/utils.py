@@ -3,17 +3,19 @@ from torch import Tensor, nn
 from torch.utils.data import dataset
 from torchtext.vocab.vocab import Vocab
 from typing import Callable, Tuple, Type
+import numpy as np
 
 import os
 from tempfile import TemporaryDirectory
 
-from torchtext.datasets import WikiText2
+from torchtext.datasets import WikiText2, WikiText103
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 
 import time
 
 import math
+import matplotlib.pyplot as plt
 
 
 def data_process(raw_text_iter: dataset.IterableDataset, vocab: Vocab, tokenizer: Callable) -> Tensor:
@@ -71,7 +73,7 @@ def get_wikitext2_data(batch_size: int, device: str) -> Tuple[Tensor, Tensor, Te
     return train_data, val_data, test_data, vocab
 
 
-def get_batch(source: Tensor, i: int, max_seq_len: int = 35) -> Tuple[Tensor, Tensor]:
+def get_batch(source: Tensor, i: int, max_seq_len: int = 100) -> Tuple[Tensor, Tensor]:
     """
     Arguments:
         source: Tensor, shape ``[full_seq_len, batch_size]``
@@ -94,7 +96,7 @@ def generate_square_subsequent_mask(sz: int) -> Tensor:
 
 
 def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable, optimizer, scheduler, n_tokens: int,
-                epoch: int, device: str, max_seq_len: int = 35, verbose: bool = True) -> None:
+                epoch: int, device: str, max_seq_len: int = 100, verbose: bool = True) -> float:
     """
     Arguments:
         model: nn.Module
@@ -115,6 +117,8 @@ def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable,
     start_time = time.time() if verbose else None
     src_mask = generate_square_subsequent_mask(max_seq_len).to(device)
 
+    loss_hist = []
+
     num_batches = len(train_data) // max_seq_len
     for batch, i in enumerate(range(0, train_data.size(0) - 1, max_seq_len)):
         data, targets = get_batch(train_data, i)
@@ -122,14 +126,18 @@ def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable,
         if seq_len != max_seq_len:  # only on last batch
             src_mask = src_mask[:seq_len, :seq_len]
         output = model(data, src_mask)
-        loss = criterion(output.view(-1, n_tokens), targets)
+        output_flat = output.view(-1, n_tokens)
+        loss = criterion(output_flat, targets)
 
         optimizer.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         optimizer.step()
 
-        total_loss += loss.item()
+        cur_loss = loss.item()
+        loss_hist.append(cur_loss)
+        total_loss += cur_loss
+
         if verbose and batch % log_interval == 0 and batch > 0:
             lr = scheduler.get_last_lr()[0]
             ms_per_batch = (time.time() - start_time) * 1000 / log_interval
@@ -141,10 +149,11 @@ def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable,
             total_loss = 0
             start_time = time.time()
     scheduler.step()
+    return np.mean(loss_hist)
 
 
 def evaluate(model: Type[nn.Module], eval_data: Tensor, n_tokens: int, criterion: Callable, device: str,
-             max_seq_len: int = 35) -> float:
+             max_seq_len: int = 100) -> float:
     model.eval()  # turn on evaluation mode
     total_loss = 0.
     src_mask = generate_square_subsequent_mask(max_seq_len).to(device)
@@ -161,9 +170,10 @@ def evaluate(model: Type[nn.Module], eval_data: Tensor, n_tokens: int, criterion
 
 
 def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_data: Tensor, n_tokens: int, n_epochs: int,
-          criterion: Callable, device: str, lr: float = 0.5, verbose: bool = True):
+          criterion: Callable, device: str, lr: float = 0.5, verbose: bool = True) -> Tuple[list, list, float]:
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.95)
+    train_loss_hist, val_loss_hist = [], []
     best_val_loss = float('inf')
 
     with TemporaryDirectory() as tempdir:
@@ -171,7 +181,8 @@ def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_dat
 
         for epoch in range(1, n_epochs + 1):
             epoch_start_time = time.time()
-            train_epoch(model, train_data, criterion, optimizer, scheduler, n_tokens, epoch, device, verbose=verbose)
+            train_loss = train_epoch(model, train_data, criterion, optimizer, scheduler, n_tokens, epoch, device,
+                                     verbose=verbose)
             val_loss = evaluate(model, val_data, n_tokens, criterion, device)
             val_ppl = math.exp(val_loss)
             elapsed = time.time() - epoch_start_time
@@ -186,6 +197,9 @@ def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_dat
                 torch.save(model.state_dict(), best_model_params_path)
 
             scheduler.step()
+
+            train_loss_hist.append(train_loss)
+            val_loss_hist.append(val_loss)
         model.load_state_dict(torch.load(best_model_params_path))  # load best model states
 
     test_loss = evaluate(model, test_data, n_tokens, criterion, device)
@@ -195,3 +209,20 @@ def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_dat
         print(f'| End of training | test loss {test_loss:5.2f} | '
               f'test ppl {test_ppl:8.2f}')
         print('=' * 89)
+
+    return train_loss_hist, val_loss_hist, test_loss
+
+
+def plot_losses(losses: dict, title: str = None):
+    fig, ax = plt.subplots(figsize=(6, 4))
+    if title is not None:
+        ax.set_title(title)
+    ax.set_xlabel('epochs')
+    ax.set_ylabel('loss')
+    for label in losses:
+        loss = losses[label]
+        x = np.linspace(1, len(loss), len(loss))
+        ax.plot(x, loss, label=label)
+        plt.legend()
+    plt.savefig(f'{title}.png'.replace(' ', '_'), dpi=300)
+    plt.show()
