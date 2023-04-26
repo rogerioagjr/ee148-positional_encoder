@@ -99,7 +99,8 @@ def generate_square_subsequent_mask(sz: int) -> Tensor:
 
 
 def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable, optimizer, scheduler, n_tokens: int,
-                epoch: int, device: str, max_seq_len: int = 100, verbose: bool = True) -> float:
+                epoch: int, device: str, max_seq_len: int = 100, verbose: bool = True,
+                scheduler_step_every_batch: bool = False) -> float:
     """
     Arguments:
         model: nn.Module
@@ -112,6 +113,7 @@ def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable,
         epoch: int
         device: str
         verbose: bool
+        scheduler_step_every_batch: bool
     """
 
     model.train()  # turn on train mode
@@ -150,7 +152,11 @@ def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable,
                   f'loss {cur_loss:5.2f} | ppl {ppl:8.2f}')
             total_loss = 0
             start_time = time.time()
-    scheduler.step()
+
+        if scheduler_step_every_batch:
+            scheduler.step()
+    if not scheduler_step_every_batch:
+        scheduler.step()
     return epoch_loss / (len(train_data) - 1)
 
 
@@ -173,7 +179,8 @@ def evaluate(model: Type[nn.Module], eval_data: Tensor, n_tokens: int, criterion
 
 def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_data: Tensor, n_tokens: int,
           n_epochs: int, criterion: Callable, device: str,
-          optimizer=None, scheduler=None, verbose: bool = True) -> Tuple[list, list, float]:
+          optimizer=None, scheduler=None, verbose: bool = True,
+          scheduler_step_every_batch: bool = False) -> Tuple[list, list, float]:
     optimizer = torch.optim.SGD(model.parameters(), lr=5.0) if optimizer is None else optimizer
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.95) if scheduler is None else scheduler
     train_loss_hist, val_loss_hist = [], []
@@ -185,7 +192,7 @@ def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_dat
         for epoch in range(1, n_epochs + 1):
             epoch_start_time = time.time()
             train_loss = train_epoch(model, train_data, criterion, optimizer, scheduler, n_tokens, epoch, device,
-                                     verbose=verbose)
+                                     verbose=verbose, scheduler_step_every_batch=scheduler_step_every_batch)
             val_loss = evaluate(model, val_data, n_tokens, criterion, device)
             val_ppl = math.exp(val_loss)
             elapsed = time.time() - epoch_start_time
