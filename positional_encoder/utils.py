@@ -180,7 +180,7 @@ def evaluate(model: Type[nn.Module], eval_data: Tensor, n_tokens: int, criterion
 def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_data: Tensor, n_tokens: int,
           n_epochs: int, criterion: Callable, device: str,
           optimizer=None, scheduler=None, verbose: bool = True,
-          scheduler_step_every_batch: bool = False) -> Tuple[list, list, float]:
+          scheduler_step_every_batch: bool = False, log_interval: int = 200) -> Tuple[list, list, float]:
     optimizer = torch.optim.SGD(model.parameters(), lr=5.0) if optimizer is None else optimizer
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.95) if scheduler is None else scheduler
     train_loss_hist, val_loss_hist = [], []
@@ -192,7 +192,8 @@ def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_dat
         for epoch in range(1, n_epochs + 1):
             epoch_start_time = time.time()
             train_loss = train_epoch(model, train_data, criterion, optimizer, scheduler, n_tokens, epoch, device,
-                                     verbose=verbose, scheduler_step_every_batch=scheduler_step_every_batch)
+                                     verbose=verbose, scheduler_step_every_batch=scheduler_step_every_batch,
+                                     log_interval=log_interval)
             val_loss = evaluate(model, val_data, n_tokens, criterion, device)
             val_ppl = math.exp(val_loss)
             elapsed = time.time() - epoch_start_time
