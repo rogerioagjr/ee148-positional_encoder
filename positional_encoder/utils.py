@@ -41,27 +41,29 @@ def batchify(data: Tensor, bsz: int) -> Tensor:
     return data
 
 
-def get_wikitext2(batch_size: int) -> Tuple[Tensor, Tensor, Tensor, Vocab]:
+def get_data(batch_size: int, dataset_name: str = 'WikiText2') -> Tuple[Tensor, Tensor, Tensor, Vocab]:
     """
     Helper Function to get tokenized and batched train, validation, and test splits from the WikiText-2 dataset
     (https://paperswithcode.com/dataset/wikitext-2)
 
     Arguments:
         batch_size: int
-        device: str,
+        dataset_name: str,
 
     Returns:
         tuple (train_data, val_data, test_data, vocab: Vocab), where train_data, val_data, and test_data have shape
         ``[seq_len, train_batch_size]``
     """
-    train_iter = WikiText2(split='train')
+    datasets = {'WikiText2': WikiText2, 'WikiText103': WikiText103}
+    dataset = datasets[dataset_name]
+    train_iter = dataset(split='train')
     tokenizer = get_tokenizer('basic_english')
     vocab = build_vocab_from_iterator(map(tokenizer, train_iter), specials=['<unk>'])
     vocab.set_default_index(vocab['<unk>'])
 
     # ``train_iter`` was "consumed" by the process of building the vocab,
     # so we have to create it again
-    train_iter, val_iter, test_iter = WikiText2()
+    train_iter, val_iter, test_iter = dataset()
     train_data = data_process(train_iter, vocab=vocab, tokenizer=tokenizer)
     val_data = data_process(val_iter, vocab=vocab, tokenizer=tokenizer)
     test_data = data_process(test_iter, vocab=vocab, tokenizer=tokenizer)
