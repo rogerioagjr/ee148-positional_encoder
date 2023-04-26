@@ -66,19 +66,20 @@ def get_wikitext103_data(batch_size: int, device: str) -> Tuple[Tensor, Tensor, 
     val_data = data_process(val_iter, vocab=vocab, tokenizer=tokenizer)
     test_data = data_process(test_iter, vocab=vocab, tokenizer=tokenizer)
 
-    train_data = batchify(train_data, batch_size).to(device)  # shape ``[seq_len, batch_size]``
-    val_data = batchify(val_data, batch_size).to(device)
-    test_data = batchify(test_data, batch_size).to(device)
+    train_data = batchify(train_data, batch_size)  # shape ``[seq_len, batch_size]``
+    val_data = batchify(val_data, batch_size)
+    test_data = batchify(test_data, batch_size)
 
     return train_data, val_data, test_data, vocab
 
 
-def get_batch(source: Tensor, i: int, max_seq_len: int = 100) -> Tuple[Tensor, Tensor]:
+def get_batch(source: Tensor, i: int, max_seq_len: int = 100, device: str = 'cpu') -> Tuple[Tensor, Tensor]:
     """
     Arguments:
         source: Tensor, shape ``[full_seq_len, batch_size]``
         i: int
-        max_seq_len: int,
+        max_seq_len: int
+        device: str
 
     Returns:
         tuple (data, target), where data has shape ``[seq_len, batch_size]`` and
@@ -87,7 +88,7 @@ def get_batch(source: Tensor, i: int, max_seq_len: int = 100) -> Tuple[Tensor, T
     seq_len = min(max_seq_len, len(source) - 1 - i)
     data = source[i:i+seq_len]
     target = source[i+1:i+1+seq_len].reshape(-1)
-    return data, target
+    return data.to(device), target.to(device)
 
 
 def generate_square_subsequent_mask(sz: int) -> Tensor:
@@ -120,7 +121,7 @@ def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable,
 
     num_batches = len(train_data) // max_seq_len
     for batch, i in enumerate(range(0, train_data.size(0) - 1, max_seq_len)):
-        data, targets = get_batch(train_data, i)
+        data, targets = get_batch(train_data, i, device)
         seq_len = data.size(0)
         if seq_len != max_seq_len:  # only on last batch
             src_mask = src_mask[:seq_len, :seq_len]
@@ -158,7 +159,7 @@ def evaluate(model: Type[nn.Module], eval_data: Tensor, n_tokens: int, criterion
     src_mask = generate_square_subsequent_mask(max_seq_len).to(device)
     with torch.no_grad():
         for i in range(0, eval_data.size(0) - 1, max_seq_len):
-            data, targets = get_batch(eval_data, i)
+            data, targets = get_batch(eval_data, i, device)
             seq_len = data.size(0)
             if seq_len != max_seq_len:
                 src_mask = src_mask[:seq_len, :seq_len]
