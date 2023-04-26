@@ -171,10 +171,11 @@ def evaluate(model: Type[nn.Module], eval_data: Tensor, n_tokens: int, criterion
     return total_loss / (len(eval_data) - 1)
 
 
-def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_data: Tensor, n_tokens: int, n_epochs: int,
-          criterion: Callable, device: str, lr: float = 5.0, verbose: bool = True) -> Tuple[list, list, float]:
+def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_data: Tensor, n_tokens: int,
+          n_epochs: int, criterion: Callable, device: str, lr: float = 5.0, step_size=1, gamma=0.95,
+          verbose: bool = True) -> Tuple[list, list, float]:
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.95)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     train_loss_hist, val_loss_hist = [], []
     best_val_loss = float('inf')
 
