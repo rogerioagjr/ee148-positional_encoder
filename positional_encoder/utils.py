@@ -199,8 +199,6 @@ def train(model: Type[nn.Module], train_data: Tensor, val_data: Tensor, test_dat
                 best_val_loss = val_loss
                 torch.save(model.state_dict(), best_model_params_path)
 
-            scheduler.step()
-
             train_loss_hist.append(train_loss)
             val_loss_hist.append(val_loss)
         model.load_state_dict(torch.load(best_model_params_path))  # load best model states
