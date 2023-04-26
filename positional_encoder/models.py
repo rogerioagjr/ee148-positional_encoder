@@ -8,7 +8,7 @@ from typing import Type
 
 class TransformerModel(nn.Module):
     def __init__(self, text_encoder: Type[nn.Module], pos_encoder: Type[nn.Module], n_tokens: int,
-                 d_model: int = 512, nhead: int = 8, d_hid: int = 2048, num_layers: int = 6,
+                 d_model: int = 256, nhead: int = 4, d_hid: int = 1024, num_layers: int = 3,
                  dropout: float = 0.1, init_range: float = 0.1):
         super().__init__()
         self.model_type = 'Transformer'
