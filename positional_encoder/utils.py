@@ -41,7 +41,7 @@ def batchify(data: Tensor, bsz: int) -> Tensor:
     return data
 
 
-def get_wikitext2_data(batch_size: int, device: str) -> Tuple[Tensor, Tensor, Tensor, Vocab]:
+def get_wikitext103_data(batch_size: int, device: str) -> Tuple[Tensor, Tensor, Tensor, Vocab]:
     """
     Helper Function to get tokenized and batched train, validation, and test splits from the WikiText-2 dataset
     (https://paperswithcode.com/dataset/wikitext-2)
@@ -54,14 +54,14 @@ def get_wikitext2_data(batch_size: int, device: str) -> Tuple[Tensor, Tensor, Te
         tuple (train_data, val_data, test_data, vocab: Vocab), where train_data, val_data, and test_data have shape
         ``[seq_len, train_batch_size]``
     """
-    train_iter = WikiText2(split='train')
+    train_iter = WikiText103(split='train')
     tokenizer = get_tokenizer('basic_english')
     vocab = build_vocab_from_iterator(map(tokenizer, train_iter), specials=['<unk>'])
     vocab.set_default_index(vocab['<unk>'])
 
     # ``train_iter`` was "consumed" by the process of building the vocab,
     # so we have to create it again
-    train_iter, val_iter, test_iter = WikiText2()
+    train_iter, val_iter, test_iter = WikiText103()
     train_data = data_process(train_iter, vocab=vocab, tokenizer=tokenizer)
     val_data = data_process(val_iter, vocab=vocab, tokenizer=tokenizer)
     test_data = data_process(test_iter, vocab=vocab, tokenizer=tokenizer)
@@ -113,11 +113,10 @@ def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable,
 
     model.train()  # turn on train mode
     total_loss = 0.
+    epoch_loss = 0.
     log_interval = 200
     start_time = time.time() if verbose else None
     src_mask = generate_square_subsequent_mask(max_seq_len).to(device)
-
-    loss_hist = []
 
     num_batches = len(train_data) // max_seq_len
     for batch, i in enumerate(range(0, train_data.size(0) - 1, max_seq_len)):
@@ -135,7 +134,7 @@ def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable,
         optimizer.step()
 
         cur_loss = loss.item()
-        loss_hist.append(cur_loss)
+        epoch_loss += cur_loss * seq_len
         total_loss += cur_loss
 
         if verbose and batch % log_interval == 0 and batch > 0:
@@ -149,7 +148,7 @@ def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable,
             total_loss = 0
             start_time = time.time()
     scheduler.step()
-    return np.mean(loss_hist)
+    return epoch_loss / (len(train_data) - 1)
 
 
 def evaluate(model: Type[nn.Module], eval_data: Tensor, n_tokens: int, criterion: Callable, device: str,
