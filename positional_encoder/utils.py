@@ -100,7 +100,7 @@ def generate_square_subsequent_mask(sz: int) -> Tensor:
 
 def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable, optimizer, scheduler, n_tokens: int,
                 epoch: int, device: str, max_seq_len: int = 100, verbose: bool = True,
-                scheduler_step_every_batch: bool = False) -> float:
+                scheduler_step_every_batch: bool = False, log_interval: int = 200) -> float:
     """
     Arguments:
         model: nn.Module
@@ -114,12 +114,12 @@ def train_epoch(model: Type[nn.Module], train_data: Tensor, criterion: Callable,
         device: str
         verbose: bool
         scheduler_step_every_batch: bool
+        log_interval: int
     """
 
     model.train()  # turn on train mode
     total_loss = 0.
     epoch_loss = 0.
-    log_interval = 200
     start_time = time.time() if verbose else None
     src_mask = generate_square_subsequent_mask(max_seq_len).to(device)
 
