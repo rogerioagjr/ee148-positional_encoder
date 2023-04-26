@@ -41,7 +41,7 @@ def batchify(data: Tensor, bsz: int) -> Tensor:
     return data
 
 
-def get_wikitext103_data(batch_size: int, device: str) -> Tuple[Tensor, Tensor, Tensor, Vocab]:
+def get_wikitext103_data(batch_size: int) -> Tuple[Tensor, Tensor, Tensor, Vocab]:
     """
     Helper Function to get tokenized and batched train, validation, and test splits from the WikiText-2 dataset
     (https://paperswithcode.com/dataset/wikitext-2)
@@ -73,7 +73,7 @@ def get_wikitext103_data(batch_size: int, device: str) -> Tuple[Tensor, Tensor, 
     return train_data, val_data, test_data, vocab
 
 
-def get_batch(source: Tensor, i: int, max_seq_len: int = 100, device: str = 'cpu') -> Tuple[Tensor, Tensor]:
+def get_batch(source: Tensor, i: int, device: str, max_seq_len: int = 100) -> Tuple[Tensor, Tensor]:
     """
     Arguments:
         source: Tensor, shape ``[full_seq_len, batch_size]``
